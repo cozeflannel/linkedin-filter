@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>LinkedIn Job Orchestrator Pro</title>
+  <!-- Load Modern Google Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <style>
+    /* Reset & Theme Variables */
+    :root {
+      --bg-primary: #0f172a;
+      --bg-secondary: #1e293b;
+      --accent-blue: #0077b5;
+      --accent-glow: #38bdf8;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --glass-bg: rgba(30, 41, 59, 0.7);
+      --glass-border: rgba(255, 255, 255, 0.08);
+      --accent-green: #10b981;
+      --accent-red: #ef4444;
+      --accent-yellow: #f59e0b;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Outfit', sans-serif;
+      background-color: var(--bg-primary);
+      color: var(--text-main);
+      padding: 15px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: var(--bg-primary);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--bg-secondary);
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--accent-blue);
+    }
+
+    /* Dashboard Header */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--glass-border);
+    }
+
+    .brand {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .brand-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-main);
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .brand-title span {
+      background: linear-gradient(135deg, var(--accent-glow) 0%, var(--accent-blue) 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      background-color: var(--accent-green);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--accent-green);
+      display: inline-block;
+    }
+
+    .brand-subtitle {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* Micro Analog Clock Widget */
+    .header-clock-container {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      padding: 4px 10px;
+      border-radius: 20px;
+    }
+
+    .mini-clock {
+      width: 24px;
+      height: 24px;
+      border: 1.5px solid var(--accent-glow);
+      border-radius: 50%;
+      position: relative;
+      background: transparent;
+    }
+
+    .mini-clock .hand {
+      position: absolute;
+      bottom: 50%;
+      left: 50%;
+      transform-origin: bottom;
+      background: var(--text-main);
+      border-radius: 1px;
+    }
+
+    .mini-clock .hour {
+      width: 1.5px;
+      height: 6px;
+      margin-left: -0.75px;
+    }
+
+    .mini-clock .minute {
+      width: 1px;
+      height: 9px;
+      margin-left: -0.5px;
+      background: var(--accent-glow);
+    }
+
+    .mini-clock .center-dot {
+      width: 3px;
+      height: 3px;
+      background: var(--accent-glow);
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+    }
+
+    .mini-tz {
+      font-size: 10px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    /* Navigation Tabs */
+    .tab-nav {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 5px;
+      background: rgba(15, 23, 42, 0.4);
+      border: 1px solid var(--glass-border);
+      border-radius: 10px;
+      padding: 3px;
+      margin-bottom: 15px;
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 8px 2px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .tab-btn:hover {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .tab-btn.active {
+      color: var(--text-main);
+      background: var(--bg-secondary);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255,255,255,0.05);
+      border: 1.5px solid var(--glass-border);
+    }
+
+    .tab-icon {
+      font-size: 14px;
+    }
+
+    /* Tab Content Wrappers */
+    .tab-content {
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .tab-content.active {
+      display: flex;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Glassmorphic Panel Layout */
+    .panel {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      padding: 12px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+      backdrop-filter: blur(12px);
+    }
+
+    .panel-title {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--accent-glow);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Form Elements */
+    .form-group {
+      margin-bottom: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    label {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    input[type="text"], input[type="number"], input[type="password"], textarea, select {
+      background-color: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--glass-border);
+      border-radius: 6px;
+      color: var(--text-main);
+      padding: 8px 10px;
+      font-family: inherit;
+      font-size: 13px;
+      width: 100%;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+
+    input:focus, textarea:focus, select:focus {
+      border-color: var(--accent-glow);
+      box-shadow: 0 0 8px rgba(56, 189, 248, 0.2);
+      background-color: rgba(15, 23, 42, 0.8);
+    }
+
+    /* Checkbox list styles */
+    .checkbox-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 6px;
+    }
+
+    .checkbox-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(15, 23, 42, 0.3);
+      padding: 6px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--glass-border);
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.2s;
+    }
+
+    .checkbox-item:hover {
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .checkbox-item input[type="checkbox"] {
+      accent-color: var(--accent-blue);
+      cursor: pointer;
+    }
+
+    .checkbox-item label {
+      margin: 0;
+      cursor: pointer;
+      font-size: 11px;
+      text-transform: none;
+      color: var(--text-main);
+      font-weight: 500;
+    }
+
+    /* Smart Time Picker Layout */
+    .time-selector-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2px;
+    }
+
+    .manual-toggle-btn {
+      font-size: 10px;
+      color: var(--accent-glow);
+      background: none;
+      border: none;
+      cursor: pointer;
+      text-decoration: underline;
+      padding: 0;
+    }
+
+    .manual-toggle-btn:hover {
+      color: var(--text-main);
+    }
+
+    .time-input-desc {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 4px;
+      line-height: 1.3;
+      font-style: italic;
+    }
+
+    /* Action Buttons */
+    .btn {
+      background: linear-gradient(135deg, var(--accent-blue) 0%, #004d80 100%);
+      color: var(--text-main);
+      border: none;
+      border-radius: 8px;
+      padding: 10px;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 6px;
+      width: 100%;
+      box-shadow: 0 4px 14px rgba(0, 119, 181, 0.2);
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(56, 189, 248, 0.3);
+      background: linear-gradient(135deg, #0087cb 0%, var(--accent-blue) 100%);
+    }
+
+    .btn:active {
+      transform: translateY(1px);
+    }
+
+    .btn-green {
+      background: linear-gradient(135deg, var(--accent-green) 0%, #065f46 100%);
+      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.2);
+    }
+    .btn-green:hover {
+      background: linear-gradient(135deg, #10c88b 0%, var(--accent-green) 100%);
+      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.3);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--glass-border);
+      box-shadow: none;
+    }
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.08);
+      box-shadow: none;
+    }
+
+    /* Warning boxes */
+    .warning-box {
+      background-color: rgba(245, 158, 11, 0.1);
+      border-left: 3px solid var(--accent-yellow);
+      color: #fcd34d;
+      padding: 8px 10px;
+      font-size: 11px;
+      border-radius: 4px;
+      margin-bottom: 8px;
+      display: none;
+      line-height: 1.4;
+    }
+
+    /* Intelligent Deep-Dive List Styles */
+    .steps-container {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .step-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .step-item.active {
+      color: var(--accent-glow);
+      font-weight: 500;
+    }
+
+    .step-item.completed {
+      color: var(--accent-green);
+    }
+
+    .step-dot {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      border: 1.5px solid var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 8px;
+      font-weight: bold;
+    }
+
+    .step-item.active .step-dot {
+      border-color: var(--accent-glow);
+      box-shadow: 0 0 5px var(--accent-glow);
+      animation: pulse 1.5s infinite;
+    }
+
+    .step-item.completed .step-dot {
+      border-color: var(--accent-green);
+      background: var(--accent-green);
+      color: var(--bg-primary);
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.08); opacity: 0.8; }
+      100% { transform: scale(1); }
+    }
+
+    .results-card {
+      background: rgba(15, 23, 42, 0.4);
+      border: 1px solid var(--glass-border);
+      border-radius: 8px;
+      padding: 10px;
+      margin-top: 10px;
+    }
+
+    .results-card h4 {
+      font-size: 12px;
+      color: var(--text-main);
+      margin-bottom: 6px;
+      border-bottom: 1px solid var(--glass-border);
+      padding-bottom: 4px;
+    }
+
+    .recruiter-list {
+      max-height: 160px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .recruiter-item {
+      display: flex;
+      flex-direction: column;
+      padding: 6px;
+      background: rgba(255, 255, 255, 0.02);
+      border-radius: 6px;
+      border: 1.5px solid transparent;
+      gap: 3px;
+    }
+
+    .recruiter-item:hover {
+      border-color: var(--glass-border);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .recruiter-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .recruiter-title {
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
+    .recruiter-actions {
+      display: flex;
+      gap: 6px;
+      margin-top: 4px;
+    }
+
+    .tiny-btn {
+      font-size: 10px;
+      padding: 3px 6px;
+      border-radius: 4px;
+      cursor: pointer;
+      border: none;
+      background: var(--accent-blue);
+      color: white;
+      font-weight: 500;
+    }
+
+    .tiny-btn-sec {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--glass-border);
+      color: var(--text-main);
+    }
+
+    /* Resume Optimizer Interface */
+    .optimizer-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .score-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 65px;
+      height: 65px;
+      border-radius: 50%;
+      background: radial-gradient(circle, var(--bg-secondary) 60%, rgba(56, 189, 248, 0.2) 100%);
+      border: 3px solid rgba(255,255,255,0.05);
+      position: relative;
+    }
+
+    .score-value {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--accent-glow);
+    }
+
+    .score-label {
+      font-size: 8px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+
+    .optimizer-summary {
+      flex: 1;
+      font-size: 11px;
+      color: var(--text-muted);
+      line-height: 1.3;
+    }
+
+    .badge-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 6px;
+    }
+
+    .badge {
+      font-size: 9px;
+      padding: 2px 6px;
+      border-radius: 12px;
+      font-weight: 600;
+    }
+
+    .badge-green {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--accent-green);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .badge-red {
+      background: rgba(239, 68, 68, 0.15);
+      color: var(--accent-red);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    .api-config-toggle {
+      font-size: 10px;
+      color: var(--text-muted);
+      background: none;
+      border: none;
+      text-align: left;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .api-config-toggle:hover {
+      color: var(--text-main);
+    }
+
+    /* Activity History Log Timeline */
+    .timeline {
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      padding-left: 14px;
+      margin-top: 8px;
+      max-height: 380px;
+      overflow-y: auto;
+      gap: 12px;
+    }
+
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 3px;
+      top: 4px;
+      bottom: 4px;
+      width: 1px;
+      background: var(--glass-border);
+    }
+
+    .timeline-node {
+      position: relative;
+      font-size: 12px;
+    }
+
+    .timeline-dot {
+      position: absolute;
+      left: -14px;
+      top: 4px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      border: 2px solid var(--bg-primary);
+    }
+
+    .timeline-dot.search { background: var(--accent-glow); }
+    .timeline-dot.interested { background: var(--accent-green); }
+    .timeline-dot.joined { background: var(--accent-yellow); }
+    .timeline-dot.message { background: var(--accent-red); }
+
+    .timeline-time {
+      font-size: 9px;
+      color: var(--text-muted);
+      margin-bottom: 2px;
+    }
+
+    .timeline-title {
+      font-weight: 600;
+      font-size: 11.5px;
+      color: var(--text-main);
+    }
+
+    .timeline-desc {
+      font-size: 10.5px;
+      color: var(--text-muted);
+      margin-top: 2px;
+      line-height: 1.3;
+    }
+
+    .timeline-link {
+      color: var(--accent-glow);
+      text-decoration: none;
+      display: inline-block;
+      margin-top: 2px;
+      font-size: 10px;
+    }
+
+    .timeline-link:hover {
+      text-decoration: underline;
+    }
+
+    .timeline-empty {
+      color: var(--text-muted);
+      font-size: 11px;
+      text-align: center;
+      padding: 20px 0;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Dashboard Header -->
+  <header>
+    <div class="brand">
+      <div class="brand-title">
+        <span>JobOrchestrator</span> Pro <div class="status-dot"></div>
+      </div>
+      <div class="brand-subtitle">AI-Powered LinkedIn Assistant</div>
+    </div>
+    
+    <!-- Mini Clock Widget -->
+    <div class="header-clock-container">
+      <div class="mini-clock">
+        <div id="hourHand" class="hand hour"></div>
+        <div id="minHand" class="hand minute"></div>
+        <div class="center-dot"></div>
+      </div>
+      <div id="tzDisplay" class="mini-tz">Local Time</div>
+    </div>
+  </header>
+
+  <!-- Navigation Bar -->
+  <nav class="tab-nav">
+    <button class="tab-btn active" data-tab="search">
+      <span class="tab-icon">🔍</span>
+      <span>Search</span>
+    </button>
+    <button class="tab-btn" data-tab="deepdive">
+      <span class="tab-icon">🤖</span>
+      <span>Deep-Dive</span>
+    </button>
+    <button class="tab-btn" data-tab="resume">
+      <span class="tab-icon">📄</span>
+      <span>Resume</span>
+    </button>
+    <button class="tab-btn" data-tab="activity">
+      <span class="tab-icon">📈</span>
+      <span>Activity</span>
+    </button>
+  </nav>
+
+  <!-- Time Warnings (shown universally if triggered) -->
+  <div id="timeWarning" class="warning-box"></div>
+
+  <!-- TAB 1: SEARCH & FILTERS -->
+  <div id="tab-search" class="tab-content active">
+    
+    <div class="panel">
+      <div class="panel-title">🎯 Search Criteria</div>
+      
+      <div class="form-group">
+        <label>Keywords (OR separated)</label>
+        <input type="text" id="keywords" value="workflow, automation, analyst">
+      </div>
+
+      <div class="form-group">
+        <label>Exclusions (NOT separated)</label>
+        <input type="text" id="exclusions" value="Data Annotation, Outlier">
+      </div>
+
+      <div class="form-group">
+        <label>Target Location</label>
+        <input type="text" id="location" value="United States">
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">
+        <div class="time-selector-header" style="width: 100%;">
+          <span>⏰ Lookback Search Period</span>
+          <button id="toggleTimeModeBtn" class="manual-toggle-btn">📅 Switch to Cutoff</button>
+        </div>
+      </div>
+      
+      <!-- Container for Dynamic Time Inputs (swapped via JS) -->
+      <div id="timeInputContainer">
+        <!-- Default: Minutes Ago layout -->
+        <div class="form-group" id="group-minutes">
+          <label>Minutes Ago Posted</label>
+          <input type="number" id="minutesAgoInput" value="30" min="1" step="1">
+          <div class="time-input-desc" id="minutesAgoDesc">Checking for job postings published within the last 30 minutes.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">⚙️ Job Filters</div>
+      
+      <div class="form-group" style="margin-bottom: 8px;">
+        <label>Workplace Type</label>
+        <div class="checkbox-grid">
+          <div class="checkbox-item">
+            <input type="checkbox" id="wt_onsite" value="1">
+            <label for="wt_onsite">On-site</label>
+          </div>
+          <div class="checkbox-item">
+            <input type="checkbox" id="wt_remote" value="2" checked>
+            <label for="wt_remote">Remote</label>
+          </div>
+          <div class="checkbox-item">
+            <input type="checkbox" id="wt_hybrid" value="3">
+            <label for="wt_hybrid">Hybrid</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-bottom: 8px;">
+        <label>Experience Level</label>
+        <div class="checkbox-grid">
+          <div class="checkbox-item">
+            <input type="checkbox" id="exp_entry" value="2" checked>
+            <label for="exp_entry">Entry Level</label>
+          </div>
+          <div class="checkbox-item">
+            <input type="checkbox" id="exp_assoc" value="3" checked>
+            <label for="exp_assoc">Associate</label>
+          </div>
+          <div class="checkbox-item">
+            <input type="checkbox" id="exp_mid" value="4">
+            <label for="exp_mid">Mid-Senior</label>
+          </div>
+          <div class="checkbox-item">
+            <input type="checkbox" id="exp_exec" value="5,6">
+            <label for="exp_exec">Exec/Director</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Outreach Filters</label>
+        <div class="checkbox-grid">
+          <div class="checkbox-item" style="grid-column: span 2;">
+            <input type="checkbox" id="filter_actively_hiring" checked>
+            <label for="filter_actively_hiring">⭐ Actively Hiring Only (f_AL)</label>
+          </div>
+          <div class="checkbox-item" style="grid-column: span 2; margin-top: 4px;">
+            <input type="checkbox" id="filter_easy_apply">
+            <label for="filter_easy_apply">⚡ Easy Apply Only (f_EA)</label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <button id="applyFilters" class="btn">Generate & Apply URL</button>
+  </div>
+
+  <!-- TAB 2: DEEP-DIVE AUTOMATION -->
+  <div id="tab-deepdive" class="tab-content">
+    
+    <div class="panel">
+      <div class="panel-title">🤖 Active Selection</div>
+      <div class="results-card" style="margin-top: 0;">
+        <div id="targetData" style="font-size: 12px; line-height: 1.4;">
+          Awaiting job selection on LinkedIn... Click on any job card in the job search page.
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" id="automationPanel" style="display: none;">
+      <div class="panel-title">⚡ DUMMY AUTOMATION FLOW</div>
+      
+      <!-- Interactive Steps Tracker -->
+      <div class="steps-container">
+        <div class="step-item" id="step-nav-company">
+          <div class="step-dot">1</div>
+          <span>Navigate to Company Page</span>
+        </div>
+        <div class="step-item" id="step-nav-people">
+          <div class="step-dot">2</div>
+          <span>Scan People & Employees</span>
+        </div>
+        <div class="step-item" id="step-scan-recruiters">
+          <div class="step-dot">3</div>
+          <span>Extract Recruiter Information</span>
+        </div>
+        <div class="step-item" id="step-join-groups">
+          <div class="step-dot">4</div>
+          <span>Identify & Connect to Groups</span>
+        </div>
+      </div>
+
+      <!-- Action Commands -->
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <button id="btnSignal" class="btn btn-green">👍 Signal 'I'm Interested'</button>
+        <button id="btnDeepDive" class="btn">🚀 Start Company Deep-Dive</button>
+      </div>
+
+      <!-- Identified Recruiter Cards -->
+      <div class="results-card" id="discoveredRecruitersCard" style="display: none; margin-top: 12px;">
+        <h4>👥 Discovered Recruiters & Contacts</h4>
+        <div class="recruiter-list" id="discoveredRecruitersList">
+          <!-- Populated dynamically -->
+          <div class="timeline-empty" style="padding: 10px 0;">No contacts scanned yet.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 3: RESUME OPTIMIZER -->
+  <div id="tab-resume" class="tab-content">
+    
+    <div class="panel">
+      <div class="panel-title">📄 Master Resume</div>
+      <div class="form-group" style="margin-bottom: 0;">
+        <textarea id="masterResume" placeholder="Paste your master plain-text resume here..." rows="8" style="resize: vertical; font-size: 11.5px;"></textarea>
+      </div>
+      <button id="btnSaveResume" class="btn btn-secondary" style="margin-top: 8px; padding: 6px; font-size: 11px;">💾 Save Master Resume</button>
+    </div>
+
+    <div class="panel" id="optimizerPanel" style="display: none;">
+      <div class="panel-title">📊 ATS Score & Keyword Match</div>
+      
+      <div class="optimizer-row">
+        <div class="score-container">
+          <div class="score-value" id="matchScoreVal">0%</div>
+          <div class="score-label">Match</div>
+        </div>
+        <div class="optimizer-summary">
+          <strong id="optimizerTargetTitle" style="color: var(--text-main);">Role Name</strong> at <span id="optimizerTargetCompany">Company</span>.<br>
+          We analyzed the active job description against your Master Resume. See matching and recommended keywords below.
+        </div>
+      </div>
+
+      <div style="margin-top: 10px;">
+        <label>Matching Keywords (Found in Resume)</label>
+        <div class="badge-container" id="matchedKeywordsContainer">
+          <div class="timeline-empty" style="padding: 2px 0; font-size: 10px;">Scanning resume...</div>
+        </div>
+      </div>
+
+      <div style="margin-top: 10px;">
+        <label>Recommended Keywords (Missing or Low Count)</label>
+        <div class="badge-container" id="missingKeywordsContainer">
+          <div class="timeline-empty" style="padding: 2px 0; font-size: 10px;">Scanning job...</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">🤖 AI Resume Tailoring (Optional)</div>
+      
+      <button id="toggleApiConfig" class="api-config-toggle" style="margin-bottom: 8px;">
+        <span>▶</span> Configure Gemini API Key
+      </button>
+      <div id="apiConfigContainer" class="form-group" style="display: none; border-left: 2px solid var(--glass-border); padding-left: 8px; margin-bottom: 10px;">
+        <label>Gemini API Key</label>
+        <input type="password" id="geminiApiKey" placeholder="AIzaSy...">
+        <div class="time-input-desc">Stored locally. Used exclusively to call Gemini's API to tailor resume text.</div>
+      </div>
+
+      <button id="btnOptimize" class="btn btn-green">✨ Generate AI Tailored Content</button>
+
+      <!-- Tailored Outputs Card -->
+      <div class="results-card" id="optimizedOutputCard" style="display: none; margin-top: 12px;">
+        <h4 style="display: flex; justify-content: space-between;">
+          <span>📝 Tailored Summary & Bullets</span>
+          <button id="btnCopyTailored" class="tiny-btn tiny-btn-sec" style="font-size: 9px; padding: 1px 4px;">Copy Text</button>
+        </h4>
+        <textarea id="tailoredResumeText" readonly rows="8" style="background-color: rgba(15, 23, 42, 0.8); resize: vertical; font-size: 11px; margin-top: 6px; font-family: monospace;"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 4: ACTIVITY LOG -->
+  <div id="tab-activity" class="tab-content">
+    
+    <div class="panel">
+      <div class="panel-title" style="display: flex; justify-content: space-between; align-items: center;">
+        <span>📈 Activity Log History</span>
+        <div style="display: flex; gap: 4px;">
+          <button id="btnExportActivity" class="tiny-btn tiny-btn-sec">📤 Export</button>
+          <button id="btnClearActivity" class="tiny-btn" style="background-color: var(--accent-red);">🗑️ Clear</button>
+        </div>
+      </div>
+
+      <!-- Scrollable Timeline -->
+      <div class="timeline" id="activityTimeline">
+        <!-- Rendered dynamically -->
+        <div class="timeline-empty">No logged activities found yet. Your searches and outreach actions will be recorded here.</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>
