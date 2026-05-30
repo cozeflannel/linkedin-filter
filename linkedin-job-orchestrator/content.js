@@ -185,6 +185,9 @@ function getCoreKeyword(jobTitle) {
 
 // 3. Automated State Machine Engine for Deep-Dive
 function checkDeepDiveState() {
+  const isAuto = window.location.href.includes("auto_orchestrator_scan=true");
+  if (!isAuto) return; // Only execute automated state machine in background tab
+
   chrome.storage.local.get(["deepdive_state", "deepdive_company_url", "deepdive_company_name"], (res) => {
     if (!res.deepdive_state || res.deepdive_state === "IDLE") return;
     
@@ -199,9 +202,10 @@ function checkDeepDiveState() {
           console.log("[JobOrchestrator Pro] Interest click outcome:", clickRes);
           // Advance state and navigate to People tab
           chrome.storage.local.set({ deepdive_state: "COMPANY_LOADED" }, () => {
-            let peopleUrl = currentUrl;
-            if (!peopleUrl.endsWith('/')) peopleUrl += '/';
-            if (!peopleUrl.includes('/people')) peopleUrl += 'people/';
+            let cleanUrl = currentUrl.split('?')[0].split('#')[0];
+            if (!cleanUrl.endsWith('/')) cleanUrl += '/';
+            if (!cleanUrl.includes('/people')) cleanUrl += 'people/';
+            const peopleUrl = cleanUrl + "?auto_orchestrator_scan=true";
             
             setTimeout(() => {
               window.location.href = peopleUrl;
@@ -361,11 +365,38 @@ function scrapeRecruiterCards(sendResponse) {
         if (sendResponse) {
           sendResponse({ success: true, count: recruitersFound.length, data: recruitersFound });
         }
+        
+        const isAuto = window.location.href.includes("auto_orchestrator_scan=true");
+        if (isAuto) {
+          // Auto-trigger group search for the top contact in the background
+          if (recruitersFound.length > 0) {
+            const topContact = recruitersFound[0];
+            const groupKeyword = topContact.title || jobTitle || "recruiting";
+            console.log(`[JobOrchestrator Pro] Auto-triggering group search for top contact keyword: ${groupKeyword}`);
+            
+            chrome.storage.local.set({
+              group_search_state: "SEARCHING",
+              group_search_keyword: groupKeyword,
+              active_scanning_recruiter_name: topContact.name
+            }, () => {
+              window.location.href = `https://www.linkedin.com/search/results/groups/?keywords=${encodeURIComponent(groupKeyword)}&auto_orchestrator_scan=true`;
+            });
+          } else {
+            // No recruiters found — nothing to group-search, so close the hidden tab
+            console.log("[JobOrchestrator Pro] No contacts found. Closing hidden tab.");
+            chrome.runtime.sendMessage({ type: "CLOSE_HIDDEN_TAB" });
+          }
+        }
       });
     } catch (error) {
       console.error("[JobOrchestrator Pro] Error scraping recruiters:", error);
       if (sendResponse) {
         sendResponse({ success: false, message: error.message });
+      }
+      // On error, still attempt to close the hidden tab if this is the background tab
+      const isAuto = window.location.href.includes("auto_orchestrator_scan=true");
+      if (isAuto) {
+        chrome.runtime.sendMessage({ type: "CLOSE_HIDDEN_TAB" });
       }
     }
   });
@@ -373,6 +404,10 @@ function scrapeRecruiterCards(sendResponse) {
 
 // 4. Automated State Machine for Group Search
 function checkGroupSearchState() {
+  const isAuto = window.location.href.includes("auto_orchestrator_scan=true");
+  const isManual = window.location.href.includes("manual_orchestrator_scan=true");
+  if (!isAuto && !isManual) return; // Only process if manually triggered or background auto tab
+
   chrome.storage.local.get(["group_search_state", "group_search_keyword"], (res) => {
     if (res.group_search_state === "SEARCHING") {
       const currentUrl = window.location.href;
@@ -425,10 +460,24 @@ function scrapeGroupCards() {
         type: "GROUPS_FOUND",
         groups: groupsFound
       });
+      
+      const isAuto = window.location.href.includes("auto_orchestrator_scan=true");
+      if (isAuto) {
+        // Self-cleanup: close the hidden tab now that all scraping is complete
+        console.log("[JobOrchestrator Pro] Scraping pipeline complete. Sending CLOSE_HIDDEN_TAB.");
+        chrome.runtime.sendMessage({ type: "CLOSE_HIDDEN_TAB" });
+      } else {
+        console.log("[JobOrchestrator Pro] Manual scan complete. Keeping tab open.");
+      }
     });
   } catch (error) {
     console.error("[JobOrchestrator Pro] Error scraping groups:", error);
     chrome.storage.local.set({ group_search_state: "IDLE" });
+    // Even on error, attempt to close hidden tab if this is the background tab
+    const isAuto = window.location.href.includes("auto_orchestrator_scan=true");
+    if (isAuto) {
+      chrome.runtime.sendMessage({ type: "CLOSE_HIDDEN_TAB" });
+    }
   }
 }
 

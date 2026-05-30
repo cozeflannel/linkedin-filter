@@ -244,12 +244,8 @@ function setupEventListeners() {
   // Generate and Apply URL filters button
   document.getElementById('applyFilters').addEventListener('click', applyJobSearchFilters);
   
-  // Deep-Dive action triggers
-  document.getElementById('btnDeepDive').addEventListener('click', startCompanyDeepDive);
-  
-  // Resume Optimizer saving and optimization
+  // Resume Optimizer saving (manual upload is still user-driven)
   document.getElementById('btnSaveResume').addEventListener('click', saveMasterResume);
-  document.getElementById('btnOptimize').addEventListener('click', runResumeOptimization);
   
   // API settings toggle
   document.getElementById('toggleApiConfig').addEventListener('click', () => {
@@ -290,6 +286,17 @@ function loadSavedData() {
         statusDiv.style.display = "block";
         statusDiv.innerText = "Active Resume: Loaded from storage ✓";
         statusDiv.style.color = "var(--accent-green)";
+      }
+      const statusTextDiv = document.getElementById('masterResumeStatusText');
+      if (statusTextDiv) {
+        statusTextDiv.innerText = "Active Resume: Loaded from storage ✓";
+        statusTextDiv.style.color = "var(--accent-green)";
+      }
+    } else {
+      const statusTextDiv = document.getElementById('masterResumeStatusText');
+      if (statusTextDiv) {
+        statusTextDiv.innerText = "No Master Resume uploaded. Upload one in the Search tab to begin.";
+        statusTextDiv.style.color = "var(--accent-yellow)";
       }
     }
     if (res.geminiApiKey) {
@@ -366,6 +373,11 @@ async function saveMasterResume() {
     chrome.storage.local.set({ masterResume: masterResumeText }, () => {
       statusDiv.innerText = `Success: ${file.name} successfully parsed! ✓`;
       statusDiv.style.color = "var(--accent-green)";
+      const statusTextDiv = document.getElementById('masterResumeStatusText');
+      if (statusTextDiv) {
+        statusTextDiv.innerText = `Active Resume: ${file.name} successfully parsed! ✓`;
+        statusTextDiv.style.color = "var(--accent-green)";
+      }
       logActivity('message', `Saved/updated Master Resume from file: ${file.name}`, '', '', '');
       runLocalKeywordAnalysis();
     });
@@ -373,6 +385,11 @@ async function saveMasterResume() {
     console.error("[JobOrchestrator Pro] Error parsing file:", err);
     statusDiv.innerText = `Error: ${err.message}`;
     statusDiv.style.color = "var(--accent-red)";
+    const statusTextDiv = document.getElementById('masterResumeStatusText');
+    if (statusTextDiv) {
+      statusTextDiv.innerText = `Error: ${err.message}`;
+      statusTextDiv.style.color = "var(--accent-red)";
+    }
     alert(`Failed to parse resume: ${err.message}`);
   }
 }
@@ -478,6 +495,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // Auto-advance to Deep-Dive and Resume tab setups
     document.getElementById('automationPanel').style.display = 'block';
     document.getElementById('optimizerPanel').style.display = 'block';
+    
+    // Zero-click auto-fire: background deep-dive + AI resume tailoring
+    startCompanyDeepDive();
+    runResumeOptimization();
   } 
   
   else if (message.type === "RECRUITERS_FOUND") {
@@ -585,11 +606,18 @@ function displayJobSelectionCard() {
   }
 }
 
-// Action: Automated Company & Recruiter Deeper Scan
+// Action: Automated Company & Recruiter Deeper Scan (Background Hidden Tab)
 function startCompanyDeepDive() {
   if (!activeJob || !activeJob.companyUrl) {
-    alert("Please select a job with a valid company profile first.");
+    console.warn("[JobOrchestrator Pro] No valid company URL for deep-dive. Skipping.");
     return;
+  }
+  
+  // Update the status indicator
+  const statusEl = document.getElementById('deepDiveAutoStatus');
+  if (statusEl) {
+    statusEl.innerText = `🔍 Scanning ${activeJob.company} in background...`;
+    statusEl.style.color = "var(--accent-glow)";
   }
   
   document.getElementById('discoveredRecruitersCard').style.display = 'block';
@@ -600,35 +628,35 @@ function startCompanyDeepDive() {
   setDeepDiveStepState('step-scan-recruiters', 'pending');
   setDeepDiveStepState('step-join-groups', 'pending');
 
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    if (!tabs[0]) return;
-    
-    // Send message to initiate automation
-    chrome.tabs.sendMessage(tabs[0].id, {
-      type: "START_DEEP_DIVE",
-      companyUrl: activeJob.companyUrl,
-      companyName: activeJob.company,
-      jobTitle: activeJob.title
+  // Store state for the hidden tab's content script to pick up
+  chrome.storage.local.set({
+    deepdive_state: "NAVIGATING_COMPANY",
+    deepdive_company_url: activeJob.companyUrl,
+    deepdive_company_name: activeJob.company,
+    deepdive_job_title: activeJob.title
+  }, () => {
+    // Append identifier parameter to isolate background scans
+    const separator = activeJob.companyUrl.includes('?') ? '&' : '?';
+    const targetUrl = activeJob.companyUrl + separator + "auto_orchestrator_scan=true";
+
+    // Dispatch to background.js to spawn a hidden tab
+    chrome.runtime.sendMessage({
+      type: "START_BACKGROUND_DEEP_DIVE",
+      companyUrl: targetUrl
     }, (response) => {
       if (chrome.runtime.lastError) {
-        // Fallback: update active tab URL directly
-        console.warn("Script context lost or background loading. Navigating directly...", chrome.runtime.lastError);
-        
-        chrome.storage.local.set({
-          deepdive_state: "NAVIGATING_COMPANY",
-          deepdive_company_url: activeJob.companyUrl,
-          deepdive_company_name: activeJob.company,
-          deepdive_job_title: activeJob.title
-        }, () => {
-          chrome.tabs.update(tabs[0].id, { url: activeJob.companyUrl });
-        });
+        console.error("[JobOrchestrator Pro] Failed to spawn background tab:", chrome.runtime.lastError);
+        if (statusEl) {
+          statusEl.innerText = "❌ Background scan failed. Retry by selecting the job again.";
+          statusEl.style.color = "var(--accent-red)";
+        }
       } else {
-        console.log("Deep-dive response:", response);
+        console.log("[JobOrchestrator Pro] Background hidden tab spawned:", response);
+        setDeepDiveStepState('step-nav-company', 'completed');
+        setDeepDiveStepState('step-nav-people', 'active');
       }
       
-      setDeepDiveStepState('step-nav-company', 'completed');
-      setDeepDiveStepState('step-nav-people', 'active');
-      logActivity('search', `Started Deep-Dive search for recruiters at ${activeJob.company}`, activeJob.title, activeJob.company, activeJob.companyUrl);
+      logActivity('search', `Started background Deep-Dive for recruiters at ${activeJob.company}`, activeJob.title, activeJob.company, activeJob.companyUrl);
     });
   });
 }
@@ -815,40 +843,49 @@ function runLocalKeywordAnalysis() {
   missingContainer.innerHTML = missing.map(k => `<span class="badge badge-red">${k}</span>`).join('') || `<span style="font-size:10px;color:var(--text-muted);">Highly optimized! No critical keywords missing.</span>`;
 }
 
-// 9. AI Tailoring via Gemini Client-side Integration
+// 9. AI Tailoring via Gemini Client-side Integration (Zero-Click Auto-Fire)
 async function runResumeOptimization() {
+  const statusEl = document.getElementById('aiTailoringStatus');
+  
   if (!activeJob) {
-    alert("Please select a job listing on LinkedIn first.");
+    console.warn("[JobOrchestrator Pro] No active job for AI tailoring.");
     return;
   }
   
   if (!masterResumeText) {
-    alert("Please upload and save your Master Resume first.");
+    if (statusEl) {
+      statusEl.innerText = "⚠️ Upload and save your Master Resume to enable auto-tailoring.";
+      statusEl.style.color = "var(--accent-yellow)";
+    }
     return;
   }
 
   const apiKeyInput = document.getElementById('geminiApiKey').value.trim();
-  const optimizeBtn = document.getElementById('btnOptimize');
   const outputCard = document.getElementById('optimizedOutputCard');
   const outputText = document.getElementById('tailoredResumeText');
 
-  // Strict API Key check
+  // Non-blocking API Key check: gently update status and abort
   if (!apiKeyInput) {
-    alert("A Gemini API Key is strictly required for AI tailoring.");
-    // Open config drawer
+    if (statusEl) {
+      statusEl.innerText = "⏳ Waiting for API Key... Configure your Gemini key in the panel above.";
+      statusEl.style.color = "var(--accent-yellow)";
+    }
+    // Gently open config drawer so user sees it
     const container = document.getElementById('apiConfigContainer');
     const toggle = document.getElementById('toggleApiConfig');
-    container.style.display = 'block';
-    toggle.innerHTML = "▼ Hide Gemini API Key Setup";
+    if (container) container.style.display = 'block';
+    if (toggle) toggle.innerHTML = "▼ Hide Gemini API Key Setup";
     return;
   }
 
   // Save API key to local storage for convenience
   chrome.storage.local.set({ geminiApiKey: apiKeyInput });
 
-  // C. Execute full Gemini AI client-side call
-  optimizeBtn.innerText = "AI Tailoring in progress...";
-  optimizeBtn.disabled = true;
+  // Update status indicator
+  if (statusEl) {
+    statusEl.innerText = "🧠 AI Tailoring in progress...";
+    statusEl.style.color = "var(--accent-glow)";
+  }
 
   try {
     const prompt = `You are a world-class professional ATS Resume Optimization Writer. 
@@ -908,25 +945,25 @@ ${activeJob.description}
     outputText.value = tailoredText;
     outputCard.style.display = 'block';
     
-    logActivity('message', `AI-Optimized resume summary for ${activeJob.title} at ${activeJob.company}`, activeJob.title, activeJob.company, '');
-    alert("AI Resume tailoring successfully completed!");
+    if (statusEl) {
+      statusEl.innerText = `✅ AI tailoring complete for ${activeJob.title} at ${activeJob.company}. Saved to Activity Log.`;
+      statusEl.style.color = "var(--accent-green)";
+    }
+    
+    // Auto-save tailored resume text to the activity log
+    logActivity('message', `AI-Optimized resume for ${activeJob.title} at ${activeJob.company}`, activeJob.title, activeJob.company, '', tailoredText);
 
   } catch (error) {
     console.error("[JobOrchestrator Pro] Gemini optimization error:", error);
-    alert(`Gemini AI Tailoring Failed: ${error.message}. Defaulting back to local keyword generator.`);
-    
-    // Fallback trigger
-    document.getElementById('geminiApiKey').value = ""; // Clear bad key
-    chrome.storage.local.remove("geminiApiKey");
-    runResumeOptimization();
-  } finally {
-    optimizeBtn.innerText = "✨ Generate AI Tailored Content";
-    optimizeBtn.disabled = false;
+    if (statusEl) {
+      statusEl.innerText = `❌ AI tailoring failed: ${error.message}`;
+      statusEl.style.color = "var(--accent-red)";
+    }
   }
 }
 
-// 10. Persistent Activity Logger Timeline System
-function logActivity(actionType, title, jobTitle, company, url) {
+// 10. Persistent Activity Logger Timeline System (Extended with tailoredResumeText)
+function logActivity(actionType, title, jobTitle, company, url, tailoredResumeText) {
   chrome.storage.local.get("activityLog", (res) => {
     const log = res.activityLog || [];
     
@@ -938,6 +975,11 @@ function logActivity(actionType, title, jobTitle, company, url) {
       company: company,
       url: url
     };
+    
+    // Attach tailored resume text if provided
+    if (tailoredResumeText) {
+      newAction.tailoredResumeText = tailoredResumeText;
+    }
     
     log.unshift(newAction); // Push to start of timeline
     
@@ -966,11 +1008,27 @@ function renderActivityTimeline() {
     
     container.innerHTML = "";
     
-    log.forEach(item => {
+    log.forEach((item, index) => {
       const node = document.createElement('div');
       node.className = "timeline-node";
       
       const localTime = new Date(item.timestamp).toLocaleString();
+      const drawerId = `resume-drawer-${index}`;
+      
+      let resumeButton = '';
+      let resumeDrawer = '';
+      if (item.tailoredResumeText) {
+        resumeButton = `<button class="tiny-btn view-resume-btn" data-drawer="${drawerId}" style="margin-top: 4px; background: rgba(56, 189, 248, 0.15); color: var(--accent-glow); border: 1px solid rgba(56, 189, 248, 0.3);">📄 View Tailored Resume</button>`;
+        resumeDrawer = `
+          <div id="${drawerId}" style="display: none; margin-top: 6px; padding: 8px; background: rgba(15, 23, 42, 0.8); border-radius: 6px; border: 1px solid var(--glass-border);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+              <span style="font-size: 9px; font-weight: 600; color: var(--accent-glow); text-transform: uppercase;">Tailored Resume Output</span>
+              <button class="tiny-btn copy-resume-btn" data-drawer="${drawerId}" style="font-size: 8px; padding: 1px 4px;">Copy</button>
+            </div>
+            <pre style="font-size: 10px; color: var(--text-main); white-space: pre-wrap; word-break: break-word; max-height: 200px; overflow-y: auto; margin: 0; font-family: monospace; line-height: 1.4;">${item.tailoredResumeText}</pre>
+          </div>
+        `;
+      }
       
       node.innerHTML = `
         <div class="timeline-dot ${item.actionType}"></div>
@@ -978,9 +1036,41 @@ function renderActivityTimeline() {
         <div class="timeline-title">${item.title}</div>
         ${item.jobTitle || item.company ? `<div class="timeline-desc"><strong>Target:</strong> ${item.jobTitle} at ${item.company}</div>` : ''}
         ${item.url ? `<a href="${item.url}" target="_blank" class="timeline-link">🔗 View LinkedIn Page</a>` : ''}
+        ${resumeButton}
+        ${resumeDrawer}
       `;
       
       container.appendChild(node);
+    });
+    
+    // Wire up toggle drawer buttons
+    container.querySelectorAll('.view-resume-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const drawerId = e.target.getAttribute('data-drawer');
+        const drawer = document.getElementById(drawerId);
+        if (drawer) {
+          const isVisible = drawer.style.display !== 'none';
+          drawer.style.display = isVisible ? 'none' : 'block';
+          e.target.innerText = isVisible ? '📄 View Tailored Resume' : '📄 Hide Tailored Resume';
+        }
+      });
+    });
+    
+    // Wire up copy buttons inside drawers
+    container.querySelectorAll('.copy-resume-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const drawerId = e.target.getAttribute('data-drawer');
+        const drawer = document.getElementById(drawerId);
+        if (drawer) {
+          const preEl = drawer.querySelector('pre');
+          if (preEl) {
+            navigator.clipboard.writeText(preEl.innerText).then(() => {
+              e.target.innerText = 'Copied ✓';
+              setTimeout(() => { e.target.innerText = 'Copy'; }, 1500);
+            });
+          }
+        }
+      });
     });
   });
 }

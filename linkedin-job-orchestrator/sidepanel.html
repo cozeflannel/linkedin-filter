@@ -751,6 +751,15 @@
   <div id="tab-search" class="tab-content active">
     
     <div class="panel">
+      <div class="panel-title">📄 Master Resume Upload</div>
+      <div class="form-group" style="margin-bottom: 0;">
+        <input type="file" id="masterResumeFile" accept=".pdf,.docx,.txt" style="font-size: 11.5px;">
+        <div id="resumeUploadStatus" style="display: none; font-size: 11px; margin-top: 6px; color: var(--accent-glow);"></div>
+      </div>
+      <button id="btnSaveResume" class="btn btn-secondary" style="margin-top: 8px; padding: 6px; font-size: 11px;">💾 Save Master Resume</button>
+    </div>
+    
+    <div class="panel">
       <div class="panel-title">🎯 Search Criteria</div>
       
       <div class="form-group">
@@ -862,7 +871,8 @@
     </div>
 
     <div class="panel" id="automationPanel" style="display: none;">
-      <div class="panel-title">⚡ DEEP-DIVE AUTOMATION FLOW</div>
+      <div class="panel-title">⚡ BACKGROUND AUTOMATION STATUS</div>
+      <div id="deepDiveAutoStatus" style="font-size: 11px; color: var(--accent-glow); margin-bottom: 10px; font-style: italic;">Awaiting job selection to auto-scan...</div>
       
       <!-- Interactive Steps Tracker -->
       <div class="steps-container">
@@ -884,11 +894,6 @@
         </div>
       </div>
 
-      <!-- Action Commands -->
-      <div style="display: flex; flex-direction: column; gap: 8px;">
-        <button id="btnDeepDive" class="btn">🚀 Start Company Deep-Dive</button>
-      </div>
-
       <!-- Identified Recruiter Cards -->
       <div class="results-card" id="discoveredRecruitersCard" style="display: none; margin-top: 12px;">
         <h4>👥 Discovered Recruiters & Contacts</h4>
@@ -905,11 +910,9 @@
     
     <div class="panel">
       <div class="panel-title">📄 Master Resume</div>
-      <div class="form-group" style="margin-bottom: 0;">
-        <input type="file" id="masterResumeFile" accept=".pdf,.docx,.txt" style="font-size: 11.5px;">
-        <div id="resumeUploadStatus" style="display: none; font-size: 11px; margin-top: 6px; color: var(--accent-glow);"></div>
+      <div id="masterResumeStatusText" style="font-size: 11px; color: var(--text-muted); line-height: 1.4;">
+        No Master Resume uploaded. Upload one in the Search tab to begin.
       </div>
-      <button id="btnSaveResume" class="btn btn-secondary" style="margin-top: 8px; padding: 6px; font-size: 11px;">💾 Save Master Resume</button>
     </div>
 
     <div class="panel" id="optimizerPanel" style="display: none;">
@@ -942,7 +945,7 @@
     </div>
 
     <div class="panel">
-      <div class="panel-title">🤖 AI Resume Tailoring (Optional)</div>
+      <div class="panel-title">🤖 AI Resume Tailoring (Auto)</div>
       
       <button id="toggleApiConfig" class="api-config-toggle" style="margin-bottom: 8px;">
         <span>▶</span> Configure Gemini API Key
@@ -953,7 +956,9 @@
         <div class="time-input-desc">Stored locally. Used exclusively to call Gemini's API to tailor resume text.</div>
       </div>
 
-      <button id="btnOptimize" class="btn btn-green">✨ Generate AI Tailored Content</button>
+      <div id="aiTailoringStatus" style="font-size: 11px; color: var(--text-muted); padding: 8px; background: rgba(15, 23, 42, 0.4); border-radius: 6px; border: 1px solid var(--glass-border);">
+        AI tailoring will run automatically when a job is selected.
+      </div>
 
       <!-- Tailored Outputs Card -->
       <div class="results-card" id="optimizedOutputCard" style="display: none; margin-top: 12px;">
