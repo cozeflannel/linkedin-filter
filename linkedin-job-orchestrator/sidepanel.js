@@ -245,7 +245,6 @@ function setupEventListeners() {
   document.getElementById('applyFilters').addEventListener('click', applyJobSearchFilters);
   
   // Deep-Dive action triggers
-  document.getElementById('btnSignal').addEventListener('click', triggerSignalInterested);
   document.getElementById('btnDeepDive').addEventListener('click', startCompanyDeepDive);
   
   // Resume Optimizer saving and optimization
@@ -286,7 +285,12 @@ function loadSavedData() {
   chrome.storage.local.get(["masterResume", "geminiApiKey", "deepdive_recruiters"], (res) => {
     if (res.masterResume) {
       masterResumeText = res.masterResume;
-      document.getElementById('masterResume').value = res.masterResume;
+      const statusDiv = document.getElementById('resumeUploadStatus');
+      if (statusDiv) {
+        statusDiv.style.display = "block";
+        statusDiv.innerText = "Active Resume: Loaded from storage ✓";
+        statusDiv.style.color = "var(--accent-green)";
+      }
     }
     if (res.geminiApiKey) {
       document.getElementById('geminiApiKey').value = res.geminiApiKey;
@@ -297,14 +301,80 @@ function loadSavedData() {
   });
 }
 
-function saveMasterResume() {
-  const text = document.getElementById('masterResume').value.trim();
-  masterResumeText = text;
+// PDF Text Extraction Integration Helper
+async function extractTextFromPdf(file) {
+  const arrayBuffer = await file.arrayBuffer();
+  if (typeof pdfjsLib === 'undefined') {
+    throw new Error("PDF.js library is not loaded. Please ensure pdf.js is loaded in sidepanel.");
+  }
+  // Setup the worker source for background rendering
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdf.worker.js';
+  const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+  const pdf = await loadingTask.promise;
+  let fullText = "";
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const textContent = await page.getTextContent();
+    const pageText = textContent.items.map(item => item.str).join(" ");
+    fullText += pageText + "\n";
+  }
+  return fullText;
+}
+
+// Word Document Text Extraction Integration Helper
+async function extractTextFromDocx(file) {
+  const arrayBuffer = await file.arrayBuffer();
+  if (typeof mammoth === 'undefined') {
+    throw new Error("Mammoth.js library is not loaded. Please ensure mammoth.js is loaded in sidepanel.");
+  }
+  const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
+  return result.value;
+}
+
+// Refactored file upload parsing & text extraction engine
+async function saveMasterResume() {
+  const fileInput = document.getElementById('masterResumeFile');
+  const statusDiv = document.getElementById('resumeUploadStatus');
   
-  chrome.storage.local.set({ masterResume: text }, () => {
-    alert("Master resume successfully saved locally!");
-    logActivity('message', 'Saved/updated Master Resume in extension storage', '', '', '');
-  });
+  if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+    alert("Please select a .pdf, .docx, or .txt file to upload.");
+    return;
+  }
+  
+  const file = fileInput.files[0];
+  statusDiv.style.display = "block";
+  statusDiv.innerText = "Processing resume file...";
+  statusDiv.style.color = "var(--accent-glow)";
+  
+  try {
+    let extractedText = "";
+    if (file.name.endsWith('.txt')) {
+      extractedText = await file.text();
+    } else if (file.name.endsWith('.pdf')) {
+      extractedText = await extractTextFromPdf(file);
+    } else if (file.name.endsWith('.docx')) {
+      extractedText = await extractTextFromDocx(file);
+    } else {
+      throw new Error("Unsupported file extension. Only .pdf, .docx, or .txt are supported.");
+    }
+    
+    if (!extractedText || !extractedText.trim()) {
+      throw new Error("No text content could be extracted from the file.");
+    }
+    
+    masterResumeText = extractedText.trim();
+    chrome.storage.local.set({ masterResume: masterResumeText }, () => {
+      statusDiv.innerText = `Success: ${file.name} successfully parsed! ✓`;
+      statusDiv.style.color = "var(--accent-green)";
+      logActivity('message', `Saved/updated Master Resume from file: ${file.name}`, '', '', '');
+      runLocalKeywordAnalysis();
+    });
+  } catch (err) {
+    console.error("[JobOrchestrator Pro] Error parsing file:", err);
+    statusDiv.innerText = `Error: ${err.message}`;
+    statusDiv.style.color = "var(--accent-red)";
+    alert(`Failed to parse resume: ${err.message}`);
+  }
 }
 
 // 6. Job Search Filter and URL Construction
@@ -419,6 +489,61 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     setDeepDiveStepState('step-scan-recruiters', 'completed');
     setDeepDiveStepState('step-join-groups', 'active');
   }
+  
+  else if (message.type === "GROUPS_FOUND") {
+    console.log("[JobOrchestrator Pro] Groups payload received:", message.groups);
+    chrome.storage.local.get(["active_scanning_recruiter_name"], (res) => {
+      const recName = res.active_scanning_recruiter_name || "";
+      if (!recName) return;
+      
+      const groupsDiv = document.getElementById(`groups-of-${recName.replace(/\s+/g, '')}`);
+      const scanBtn = Array.from(document.querySelectorAll('.scan-groups-btn')).find(b => b.getAttribute('data-name') === recName);
+      
+      if (scanBtn) {
+        scanBtn.innerText = "Groups Scanned ✓";
+        scanBtn.disabled = true;
+      }
+      
+      if (groupsDiv) {
+        groupsDiv.style.display = 'block';
+        const groupsListDiv = groupsDiv.querySelector('.groups-list');
+        if (groupsListDiv) {
+          if (message.groups && message.groups.length > 0) {
+            groupsListDiv.innerHTML = message.groups.map(g => `
+              <div style="font-size: 10.5px; display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.2); padding: 4px; border-radius: 4px;">
+                <span>🌐 ${g.name}</span>
+                <button class="tiny-btn join-grp-btn" data-recname="${recName}" data-grpname="${g.name}" data-url="${g.url}" style="font-size: 8px; padding: 2px 4px; background: var(--accent-green);">Join</button>
+              </div>
+            `).join('');
+            
+            // Wire up group join buttons
+            groupsListDiv.querySelectorAll('.join-grp-btn').forEach(joinBtn => {
+              joinBtn.addEventListener('click', (je) => {
+                const grpName = je.target.getAttribute('data-grpname');
+                const grpUrl = je.target.getAttribute('data-url');
+                
+                je.target.innerText = "Joined ✓";
+                je.target.style.backgroundColor = "transparent";
+                je.target.style.color = "var(--text-muted)";
+                je.target.disabled = true;
+                
+                alert(`Requested to Join Group: ${grpName}! Navigating to the group section...`);
+                chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                  chrome.tabs.update(tabs[0].id, { url: grpUrl });
+                  logActivity('joined', `Requested to join Group: "${grpName}" (Found via Recruiter: ${recName})`, '', '', grpUrl);
+                });
+              });
+            });
+          } else {
+            groupsListDiv.innerHTML = `<div style="font-size: 10px; color: var(--text-muted);">No groups found for this keyword.</div>`;
+          }
+        }
+      }
+      
+      logActivity('joined', `Scanned and discovered interest groups on ${recName}'s profile`, '', '', '');
+      setDeepDiveStepState('step-join-groups', 'completed');
+    });
+  }
 });
 
 // Render the selected job card metadata in sidepanel
@@ -460,41 +585,6 @@ function displayJobSelectionCard() {
   }
 }
 
-// Action: Click "I'm Interested" on LinkedIn Company page
-function triggerSignalInterested() {
-  if (!activeJob) {
-    alert("Please select a job first.");
-    return;
-  }
-  
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    if (!tabs[0]) return;
-    
-    // Check if on company page
-    const currentUrl = tabs[0].url;
-    if (!currentUrl.includes('/company/')) {
-      alert("To signal interest, you must be on the company page. We'll navigate you there now! Once loaded, click 'Signal Interested' again.");
-      if (activeJob.companyUrl) {
-        chrome.tabs.update(tabs[0].id, { url: activeJob.companyUrl });
-      }
-      return;
-    }
-    
-    // Dispatch click message to content script
-    chrome.tabs.sendMessage(tabs[0].id, { type: "CLICK_INTERESTED" }, (response) => {
-      if (chrome.runtime.lastError) {
-        console.error(chrome.runtime.lastError);
-        alert("Automation signal failed. Make sure the tab is active and fully loaded.");
-      } else if (response && response.success) {
-        alert(response.message || "Signaled interest successfully!");
-        logActivity('interested', `Signaled interest in ${activeJob.company}`, activeJob.title, activeJob.company, currentUrl);
-      } else {
-        alert(response ? response.message : "Could not find 'Interested' button on this page.");
-      }
-    });
-  });
-}
-
 // Action: Automated Company & Recruiter Deeper Scan
 function startCompanyDeepDive() {
   if (!activeJob || !activeJob.companyUrl) {
@@ -502,7 +592,6 @@ function startCompanyDeepDive() {
     return;
   }
   
-  const stepNav = document.getElementById('discoveredDiscoveredCard');
   document.getElementById('discoveredRecruitersCard').style.display = 'block';
   
   // Set UI visual steps
@@ -518,7 +607,8 @@ function startCompanyDeepDive() {
     chrome.tabs.sendMessage(tabs[0].id, {
       type: "START_DEEP_DIVE",
       companyUrl: activeJob.companyUrl,
-      companyName: activeJob.company
+      companyName: activeJob.company,
+      jobTitle: activeJob.title
     }, (response) => {
       if (chrome.runtime.lastError) {
         // Fallback: update active tab URL directly
@@ -527,7 +617,8 @@ function startCompanyDeepDive() {
         chrome.storage.local.set({
           deepdive_state: "NAVIGATING_COMPANY",
           deepdive_company_url: activeJob.companyUrl,
-          deepdive_company_name: activeJob.company
+          deepdive_company_name: activeJob.company,
+          deepdive_job_title: activeJob.title
         }, () => {
           chrome.tabs.update(tabs[0].id, { url: activeJob.companyUrl });
         });
@@ -565,25 +656,29 @@ function renderDiscoveredRecruiters(recruiters) {
     const item = document.createElement('div');
     item.className = "recruiter-item";
     
-    // Highly relevant group keywords depending on user searches
-    const mockGroups = getMockRoleGroupsForJob(activeJob ? activeJob.title : "Automation");
-    
+    let badgeStyle = "background: rgba(148, 163, 184, 0.15); color: var(--text-muted); border: 1px solid rgba(148, 163, 184, 0.3);";
+    if (rec.priority === 1) {
+      badgeStyle = "background: rgba(16, 185, 129, 0.15); color: var(--accent-green); border: 1px solid rgba(16, 185, 129, 0.3);";
+    } else if (rec.priority === 2) {
+      badgeStyle = "background: rgba(245, 158, 11, 0.15); color: var(--accent-yellow); border: 1px solid rgba(245, 158, 11, 0.3);";
+    } else if (rec.priority === 3) {
+      badgeStyle = "background: rgba(56, 189, 248, 0.15); color: var(--accent-glow); border: 1px solid rgba(56, 189, 248, 0.3);";
+    }
+
     item.innerHTML = `
-      <div class="recruiter-name">${rec.name}</div>
-      <div class="recruiter-title">${rec.title}</div>
-      <div class="recruiter-actions">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span class="recruiter-name" style="font-weight: 600;">${rec.name}</span>
+        <span class="badge" style="${badgeStyle}">${rec.category || 'Contact'}</span>
+      </div>
+      <div class="recruiter-title" style="margin-top: 2px;">${rec.title}</div>
+      <div class="recruiter-actions" style="margin-top: 6px;">
         <button class="tiny-btn visit-profile-btn" data-url="${rec.url}">👤 View Profile</button>
-        <button class="tiny-btn tiny-btn-sec scan-groups-btn" data-name="${rec.name}">👥 Scan Groups</button>
+        <button class="tiny-btn tiny-btn-sec scan-groups-btn" data-name="${rec.name}" data-title="${rec.title}">👥 Scan Groups</button>
       </div>
       <div class="recruiter-groups-container" id="groups-of-${rec.name.replace(/\s+/g, '')}" style="display: none; margin-top: 6px; border-left: 2px solid var(--accent-glow); padding-left: 6px;">
         <div style="font-size: 9px; font-weight: 600; color: var(--accent-glow); text-transform: uppercase;">Professional Groups Joined</div>
-        <div style="display: flex; flex-direction: column; gap: 4px; margin-top: 4px;">
-          ${mockGroups.map(g => `
-            <div style="font-size: 10.5px; display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.2); padding: 4px; border-radius: 4px;">
-              <span>🌐 ${g.name}</span>
-              <button class="tiny-btn join-grp-btn" data-recname="${rec.name}" data-grpname="${g.name}" data-url="${g.url}" style="font-size: 8px; padding: 2px 4px; background: var(--accent-green);">Join</button>
-            </div>
-          `).join('')}
+        <div class="groups-list" style="display: flex; flex-direction: column; gap: 4px; margin-top: 4px;">
+          <!-- Loaded dynamically from LinkedIn Groups Search -->
         </div>
       </div>
     `;
@@ -597,73 +692,45 @@ function renderDiscoveredRecruiters(recruiters) {
       const url = e.target.getAttribute('data-url');
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         chrome.tabs.update(tabs[0].id, { url: url });
-        logActivity('search', `Navigated to Recruiter profile: ${e.target.parentElement.parentElement.firstElementChild.innerText}`, '', '', url);
+        logActivity('search', `Navigated to Recruiter profile: ${e.target.parentElement.parentElement.firstElementChild.firstElementChild.innerText}`, '', '', url);
       });
     });
   });
-
-  // Wire up Group scanning simulation
+ 
+  // Wire up dynamic Group scanning
   list.querySelectorAll('.scan-groups-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       const recName = e.target.getAttribute('data-name');
-      const groupsDiv = document.getElementById(`groups-of-${recName.replace(/\s+/g, '')}`);
+      const recTitle = e.target.getAttribute('data-title');
       
       e.target.innerText = "Scanning...";
       setDeepDiveStepState('step-join-groups', 'active');
       
-      setTimeout(() => {
-        e.target.innerText = "Groups Scanned ✓";
-        e.target.disabled = true;
-        if (groupsDiv) groupsDiv.style.display = 'block';
-        
-        // Log action
-        logActivity('joined', `Scanned and discovered interest groups on ${recName}'s profile`, '', '', '');
-        setDeepDiveStepState('step-join-groups', 'completed');
-      }, 1200);
-    });
-  });
-
-  // Wire up Group join actions
-  list.querySelectorAll('.join-grp-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      const grpName = e.target.getAttribute('data-grpname');
-      const recName = e.target.getAttribute('data-recname');
-      const grpUrl = e.target.getAttribute('data-url');
-      
-      e.target.innerText = "Joined ✓";
-      e.target.style.backgroundColor = "transparent";
-      e.target.style.color = "var(--text-muted)";
-      e.target.disabled = true;
-      
-      alert(`Requested to Join Group: ${grpName}! Navigating to the group section...`);
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        chrome.tabs.update(tabs[0].id, { url: grpUrl });
-        logActivity('joined', `Requested to join Group: "${grpName}" (Found via Recruiter: ${recName})`, '', '', grpUrl);
+      chrome.storage.local.set({ active_scanning_recruiter_name: recName }, () => {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          if (!tabs[0]) {
+            e.target.innerText = "Scan Failed";
+            setDeepDiveStepState('step-join-groups', 'pending');
+            return;
+          }
+          
+          chrome.tabs.sendMessage(tabs[0].id, {
+            type: "SEARCH_LINKEDIN_GROUPS",
+            keyword: recTitle || (activeJob ? activeJob.title : "recruiting")
+          }, (response) => {
+            if (chrome.runtime.lastError || !response || !response.success) {
+              console.error("SEARCH_LINKEDIN_GROUPS failed:", chrome.runtime.lastError || response);
+              e.target.innerText = "Scan Failed";
+              setDeepDiveStepState('step-join-groups', 'pending');
+              alert("Failed to scan groups. Ensure you are on a LinkedIn page with the content script active.");
+            } else {
+              console.log("[JobOrchestrator Pro] Group scan initiated on content script.");
+            }
+          });
+        });
       });
     });
   });
-}
-
-// Generate premium mock networking groups based on scraped job title keyword
-function getMockRoleGroupsForJob(jobTitle) {
-  const title = jobTitle.toLowerCase();
-  
-  if (title.includes('analyst') || title.includes('business') || title.includes('data')) {
-    return [
-      { name: "Business Analysts & Analytics Elite Network", url: "https://www.linkedin.com/groups/29008" },
-      { name: "Global Data & Business Intelligence Network", url: "https://www.linkedin.com/groups/40056" }
-    ];
-  } else if (title.includes('automate') || title.includes('workflow') || title.includes('ops') || title.includes('oper')) {
-    return [
-      { name: "Workflow Automation & RPA Professional Group", url: "https://www.linkedin.com/groups/10904" },
-      { name: "RevOps & Business Systems Orchestrators Community", url: "https://www.linkedin.com/groups/70921" }
-    ];
-  } else {
-    return [
-      { name: "Talent Acquisition & Executive Recruiting Network", url: "https://www.linkedin.com/groups/42370" },
-      { name: "Corporate HR Professionals Global Forum", url: "https://www.linkedin.com/groups/3761" }
-    ];
-  }
 }
 
 // 8. Local ATS Resume Similarity Analyzer
@@ -756,7 +823,7 @@ async function runResumeOptimization() {
   }
   
   if (!masterResumeText) {
-    alert("Please enter and save your Master Resume first under the Master Resume editor.");
+    alert("Please upload and save your Master Resume first.");
     return;
   }
 
@@ -765,40 +832,19 @@ async function runResumeOptimization() {
   const outputCard = document.getElementById('optimizedOutputCard');
   const outputText = document.getElementById('tailoredResumeText');
 
-  // A. Save API key to local storage for convenience
-  if (apiKeyInput) {
-    chrome.storage.local.set({ geminiApiKey: apiKeyInput });
-  }
-
-  // B. Fallback rule-based keywords optimizer if no API key is specified
+  // Strict API Key check
   if (!apiKeyInput) {
-    console.log("[JobOrchestrator Pro] No Gemini API key provided. Using rule-based local keyword injection...");
-    optimizeBtn.innerText = "Tailoring locally...";
-    optimizeBtn.disabled = true;
-
-    setTimeout(() => {
-      // Gather missing keywords from DOM badges
-      const missingBadges = Array.from(document.querySelectorAll('#missingKeywordsContainer .badge')).map(b => b.innerText);
-      
-      let localTailored = `[LOCAL OPTIMIZER SUMMARY - INJECTED KEYWORDS]\n\n`;
-      localTailored += `Experienced and metrics-driven professional with deep expertise in ${missingBadges.slice(0, 3).join(', ')} and core ${activeJob.title} operations. Proven history of optimizing execution pipelines at ${activeJob.company}.\n\n`;
-      localTailored += `[RECOMMENDED RESUME BULLET POINTS TO ADD]\n`;
-      missingBadges.slice(3, 7).forEach(kw => {
-        localTailored += `• Led business critical initiatives integrating ${kw} structures, resulting in a 24% increase in team output efficiency.\n`;
-      });
-      
-      outputText.value = localTailored;
-      outputCard.style.display = 'block';
-      
-      optimizeBtn.innerText = "✨ Generate AI Tailored Content";
-      optimizeBtn.disabled = false;
-      
-      logActivity('message', `Locally optimized resume summary for ${activeJob.title} at ${activeJob.company}`, activeJob.title, activeJob.company, '');
-      alert("Resume tailored locally! To get advanced AI rewriting, supply your Google Gemini API key above.");
-    }, 1000);
-    
+    alert("A Gemini API Key is strictly required for AI tailoring.");
+    // Open config drawer
+    const container = document.getElementById('apiConfigContainer');
+    const toggle = document.getElementById('toggleApiConfig');
+    container.style.display = 'block';
+    toggle.innerHTML = "▼ Hide Gemini API Key Setup";
     return;
   }
+
+  // Save API key to local storage for convenience
+  chrome.storage.local.set({ geminiApiKey: apiKeyInput });
 
   // C. Execute full Gemini AI client-side call
   optimizeBtn.innerText = "AI Tailoring in progress...";

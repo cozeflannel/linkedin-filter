@@ -755,17 +755,17 @@
       
       <div class="form-group">
         <label>Keywords (OR separated)</label>
-        <input type="text" id="keywords" value="workflow, automation, analyst">
+        <input type="text" id="keywords" placeholder="e.g. workflow, automation, analyst">
       </div>
 
       <div class="form-group">
         <label>Exclusions (NOT separated)</label>
-        <input type="text" id="exclusions" value="Data Annotation, Outlier">
+        <input type="text" id="exclusions" placeholder="e.g. Data Annotation, Outlier">
       </div>
 
       <div class="form-group">
         <label>Target Location</label>
-        <input type="text" id="location" value="United States">
+        <input type="text" id="location" placeholder="e.g. United States">
       </div>
     </div>
 
@@ -799,7 +799,7 @@
             <label for="wt_onsite">On-site</label>
           </div>
           <div class="checkbox-item">
-            <input type="checkbox" id="wt_remote" value="2" checked>
+            <input type="checkbox" id="wt_remote" value="2">
             <label for="wt_remote">Remote</label>
           </div>
           <div class="checkbox-item">
@@ -813,11 +813,11 @@
         <label>Experience Level</label>
         <div class="checkbox-grid">
           <div class="checkbox-item">
-            <input type="checkbox" id="exp_entry" value="2" checked>
+            <input type="checkbox" id="exp_entry" value="2">
             <label for="exp_entry">Entry Level</label>
           </div>
           <div class="checkbox-item">
-            <input type="checkbox" id="exp_assoc" value="3" checked>
+            <input type="checkbox" id="exp_assoc" value="3">
             <label for="exp_assoc">Associate</label>
           </div>
           <div class="checkbox-item">
@@ -862,7 +862,7 @@
     </div>
 
     <div class="panel" id="automationPanel" style="display: none;">
-      <div class="panel-title">⚡ DUMMY AUTOMATION FLOW</div>
+      <div class="panel-title">⚡ DEEP-DIVE AUTOMATION FLOW</div>
       
       <!-- Interactive Steps Tracker -->
       <div class="steps-container">
@@ -886,7 +886,6 @@
 
       <!-- Action Commands -->
       <div style="display: flex; flex-direction: column; gap: 8px;">
-        <button id="btnSignal" class="btn btn-green">👍 Signal 'I'm Interested'</button>
         <button id="btnDeepDive" class="btn">🚀 Start Company Deep-Dive</button>
       </div>
 
@@ -907,7 +906,8 @@
     <div class="panel">
       <div class="panel-title">📄 Master Resume</div>
       <div class="form-group" style="margin-bottom: 0;">
-        <textarea id="masterResume" placeholder="Paste your master plain-text resume here..." rows="8" style="resize: vertical; font-size: 11.5px;"></textarea>
+        <input type="file" id="masterResumeFile" accept=".pdf,.docx,.txt" style="font-size: 11.5px;">
+        <div id="resumeUploadStatus" style="display: none; font-size: 11px; margin-top: 6px; color: var(--accent-glow);"></div>
       </div>
       <button id="btnSaveResume" class="btn btn-secondary" style="margin-top: 8px; padding: 6px; font-size: 11px;">💾 Save Master Resume</button>
     </div>
@@ -986,6 +986,8 @@
     </div>
   </div>
 
+  <script src="pdf.js"></script>
+  <script src="mammoth.js"></script>
   <script src="sidepanel.js"></script>
 </body>
 </html>
